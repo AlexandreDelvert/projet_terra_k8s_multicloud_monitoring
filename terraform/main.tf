@@ -6,7 +6,7 @@ module "windows_server" {
   os_type          = "windows"
   admin_username   = var.azure_admin_user
   admin_password   = var.azure_admin_password
-  ssh_public_key   = file("/home/adelvert/.ssh/id_rsa.pub")
+  ssh_public_key   = file(var.ssh_public_key)
 }
 
 
@@ -18,7 +18,7 @@ module "linux_k8s_server" {
   vm_size          = "Standard_B2s"
   os_type          = "linux"
   admin_username   = var.azure_admin_user
-  ssh_public_key   = file("/home/adelvert/.ssh/id_rsa.pub")
+  ssh_public_key   = file(var.ssh_public_key)
 }
 
 module "monitoring_server" {
@@ -29,6 +29,6 @@ module "monitoring_server" {
   os_type          = var.os_type
   key_name         = var.aws_key_name
   region           = "eu-west-3"
-  ssh_public_key   = file("/home/adelvert/.ssh/id_rsa.pub")
+  ssh_public_key   = file(var.ssh_public_key)
   security_group_id = var.security_group_id
 }

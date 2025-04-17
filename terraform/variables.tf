@@ -117,13 +117,9 @@ variable "azure_admin_user" {
 }
 
 variable "ssh_public_key" {
-  description = "Contenu de la clé publique SSH"
+  description = "Chemin vers la clé publique SSH"
   type        = string
   default = " "
-}
-
-locals {
-  ssh_key_content = file("/home/adelvert/.ssh/id_rsa.pub")
 }
 
 variable "azure_admin_password" {
