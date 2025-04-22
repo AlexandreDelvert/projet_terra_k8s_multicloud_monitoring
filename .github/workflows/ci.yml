@@ -1,4 +1,4 @@
-name: Terraform CI
+name: CI Terraform + Versioning
 
 on:
   push:
@@ -6,82 +6,76 @@ on:
       - main
 
 jobs:
-  validate:
-    name: Validate Terraform code
+  validate-and-version:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: terraform
-
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+      - name: Set up Git
+        run: |
+          git config --global user.email "actions@github.com"
+          git config --global user.name "github-actions"
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v2
         with:
-          terraform_version: 1.5.0
+          terraform_version: 1.6.6
 
       - name: Terraform Init
-        run: terraform init -backend=false
+        run: terraform/init
 
       - name: Terraform Validate
         run: terraform validate
-name: Get latest tag
-  id: get_tag
-  run: |
-    tag=$(git describe --tags --abbrev=0 || echo "v0.0.0")
-    echo "Latest tag: $tag"
-    echo "tag=${tag#v}" >> $GITHUB_OUTPUT
 
-name: Calculate changes since last tag
-  id: changes
-  run: |
-    git fetch --tags
-    files_added=$(git diff --name-only --diff-filter=A ${{ steps.get_tag.outputs.tag }} HEAD | wc -l)
-    lines_changed=$(git diff --numstat ${{ steps.get_tag.outputs.tag }} HEAD | awk '{added += $1; deleted += $2} END {print added + deleted}')
-    echo "added_files=$files_added" >> $GITHUB_OUTPUT
-    echo "changed_lines=$lines_changed" >> $GITHUB_OUTPUT
+      # 🧠 Get latest version tag (or fallback)
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          tag=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $tag"
+          echo "tag=${tag#v}" >> $GITHUB_OUTPUT
 
-name: Bump version
-  id: bump
-  run: |
-    current="${{ steps.get_tag.outputs.tag }}"
-    IFS='.' read -r major minor patch <<< "$current"
-    added=${{ steps.changes.outputs.added_files }}
-    changed=${{ steps.changes.outputs.changed_lines }}
+      # 🧮 Determine next version based on diff
+      - name: Calculate next version
+        id: bump
+        run: |
+          last_version=${{ steps.get_tag.outputs.tag }}
+          IFS='.' read -r major minor patch <<< "$last_version"
 
-    if [[ $changed -gt 20 || $added -gt 2 ]]; then
-      ((major++))
-      minor=0
-      patch=0
-    elif [[ $changed -gt 20 || $added -gt 0 ]]; then
-      ((minor++))
-      patch=0
-    else
-      ((patch++))
-    fi
+          added_files=$(git diff --name-only HEAD^ HEAD | wc -l)
+          changed_lines=$(git diff --stat HEAD^ HEAD | grep -E '[0-9]+ insertions?|[0-9]+ deletions?' | awk '{sum += $1} END {print sum + 0}')
 
-    version="$major.$minor.$patch"
-    echo "new_version=$version" >> $GITHUB_OUTPUT
-    echo "🆕 Nouvelle version: $version"
+          if [ "$changed_lines" -gt 20 ] || [ "$added_files" -gt 2 ]; then
+            ((major+=1))
+            minor=0
+            patch=0
+          elif [ "$changed_lines" -gt 20 ] || [ "$added_files" -gt 0 ]; then
+            ((minor+=1))
+            patch=0
+          else
+            ((patch+=1))
+          fi
 
-name: Create and push Git tag
-  run: |
-    version=${{ steps.bump.outputs.new_version }}
-    git config --global user.email "actions@github.com"
-    git config --global user.name "github-actions"
-    git tag "v$version"
-    git push origin "v$version"
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          new_version="${major}.${minor}.${patch}"
+          echo "new_version=$new_version" >> $GITHUB_OUTPUT
+          echo "📌 Nouvelle version : $new_version"
 
-name: Create GitHub Release
-  uses: softprops/action-gh-release@v1
-  with:
-    tag_name: v${{ steps.bump.outputs.new_version }}
-    name: "Version ${{ steps.bump.outputs.new_version }}"
-    body: "🔖 Release automatique générée à partir des changements détectés."
-  env:
-    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # 🏷️ Create Git Tag
+      - name: Create and push Git tag
+        run: |
+          git tag "v${{ steps.bump.outputs.new_version }}"
+          git push origin "v${{ steps.bump.outputs.new_version }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # 🚀 Create GitHub Release
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.bump.outputs.new_version }}
+          name: "Version ${{ steps.bump.outputs.new_version }}"
+          body: "🔖 Release générée automatiquement"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
