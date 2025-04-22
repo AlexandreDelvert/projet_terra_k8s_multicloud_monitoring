@@ -26,3 +26,4 @@
     bash bump_version.sh
     version=$(cat version.txt)
     echo "VERSION=$version" >> $GITHUB_OUTPUT
+
