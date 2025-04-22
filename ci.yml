@@ -1,29 +1,55 @@
-- name: Bump version based on changes
+- name: Get latest tag
+  id: get_tag
   run: |
-    bash bump_version.sh
+    tag=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+    echo "Latest tag: $tag"
+    echo "tag=${tag#v}" >> $GITHUB_OUTPUT
+
+- name: Calculate changes since last tag
+  id: changes
+  run: |
+    git fetch --tags
+    files_added=$(git diff --name-only --diff-filter=A ${{ steps.get_tag.outputs.tag }} HEAD | wc -l)
+    lines_changed=$(git diff --numstat ${{ steps.get_tag.outputs.tag }} HEAD | awk '{added += $1; deleted += $2} END {print added + deleted}')
+    echo "added_files=$files_added" >> $GITHUB_OUTPUT
+    echo "changed_lines=$lines_changed" >> $GITHUB_OUTPUT
+
+- name: Bump version
+  id: bump
+  run: |
+    current="${{ steps.get_tag.outputs.tag }}"
+    IFS='.' read -r major minor patch <<< "$current"
+    added=${{ steps.changes.outputs.added_files }}
+    changed=${{ steps.changes.outputs.changed_lines }}
+
+    if [[ $changed -gt 20 || $added -gt 2 ]]; then
+      ((major++))
+      minor=0
+      patch=0
+    elif [[ $changed -gt 20 || $added -gt 0 ]]; then
+      ((minor++))
+      patch=0
+    else
+      ((patch++))
+    fi
+
+    version="$major.$minor.$patch"
+    echo "new_version=$version" >> $GITHUB_OUTPUT
+    echo "🆕 Nouvelle version: $version"
+
+- name: Create tag and release
+  run: |
+    version=${{ steps.bump.outputs.new_version }}
     git config --global user.email "actions@github.com"
     git config --global user.name "github-actions"
-    git add version.txt
-    git commit -m "chore: bump version"
-    git push https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }} HEAD:main
-
-- name: Create and push Git tag
-  run: |
-    version=$(cat version.txt)
     git tag "v$version"
-    git push https://x-access-token:${{ secrets.GH_TOKEN }}@github.com/${{ github.repository }} --tags
+    git push origin "v$version"
+  env:
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 - name: Create GitHub Release
   uses: softprops/action-gh-release@v1
   with:
-    tag_name: v${{ steps.version.outputs.VERSION }}
+    tag_name: v${{ steps.bump.outputs.new_version }}
   env:
-    GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-
-- name: Bump version and output
-  id: version
-  run: |
-    bash bump_version.sh
-    version=$(cat version.txt)
-    echo "VERSION=$version" >> $GITHUB_OUTPUT
-
+    GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
