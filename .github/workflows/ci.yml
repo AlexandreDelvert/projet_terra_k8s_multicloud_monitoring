@@ -85,5 +85,3 @@ name: Create GitHub Release
     body: "🔖 Release automatique générée à partir des changements détectés."
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
