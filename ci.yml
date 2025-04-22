@@ -37,7 +37,7 @@
     echo "new_version=$version" >> $GITHUB_OUTPUT
     echo "🆕 Nouvelle version: $version"
 
-- name: Create tag and release
+- name: Create and push Git tag
   run: |
     version=${{ steps.bump.outputs.new_version }}
     git config --global user.email "actions@github.com"
@@ -51,5 +51,7 @@
   uses: softprops/action-gh-release@v1
   with:
     tag_name: v${{ steps.bump.outputs.new_version }}
+    name: "Version ${{ steps.bump.outputs.new_version }}"
+    body: "🔖 Release automatique générée à partir des changements détectés."
   env:
     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
